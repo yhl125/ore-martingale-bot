@@ -78,6 +78,20 @@ Round 3: 0.004 SOL → Won   → Next: 0.001 SOL (reset)
    RUST_LOG=info cargo run --release
    ```
 
+   Tip: on small machines (e.g., GCP e2‑micro), skip compiling and run the prebuilt Linux x86_64 binary (v0.1.0):
+
+   ```bash
+   # Download prebuilt binary
+   wget -O ore-martingale-bot \
+     https://github.com/yhl125/ore-martingale-bot/releases/download/v0.1.0/ore-martingale-bot
+
+   # Make it executable and run (put config.json next to the binary)
+   chmod +x ore-martingale-bot
+   RUST_LOG=info ./ore-martingale-bot
+   ```
+
+   Note: Target is Linux x86_64 (glibc). If you see "Exec format error", build from source on your machine.
+
 ### First Run Checklist
 
 - [ ] SOL balance > minimum threshold (default: 0.1 SOL)
