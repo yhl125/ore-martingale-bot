@@ -24,7 +24,7 @@ use tokio::time::sleep;
 const SOLANA_SLOT_TIME_SECONDS: f64 = 0.4; // ~400ms per slot
 const ROUND_START_BUFFER_SECONDS: u64 = 2; // Buffer before round starts
 const ROUND_COMPLETION_POLL_INTERVAL_SECS: u64 = 10; // Polling interval for round completion
-const ROUND_COMPLETION_TIMEOUT_SECS: u64 = 60; // 1 minute timeout
+const ROUND_COMPLETION_TIMEOUT_SECS: u64 = 120; // 2 minute timeout
 const RNG_RETRY_INTERVAL_SECS: u64 = 2; // Retry interval for RNG availability
 const MAX_RNG_ATTEMPTS: u8 = 20; // Max attempts to get RNG
 const REWARDS_RETRY_INTERVAL_SECS: u64 = 2; // Retry interval for rewards update
@@ -330,7 +330,7 @@ async fn run_betting_round(
         }
     }
 
-    // Wait for round to complete (max 5 minutes)
+    // Wait for round to complete (max 2 minutes)
     log::debug!("⏳ Waiting for round #{} to complete...", round_id);
     let max_wait_time = Duration::from_secs(ROUND_COMPLETION_TIMEOUT_SECS);
     let start_time = std::time::Instant::now();
