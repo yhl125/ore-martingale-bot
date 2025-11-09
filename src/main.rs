@@ -16,6 +16,7 @@ use mining::grid;
 use mining::strategy::MartingaleState;
 use ore::OreClient;
 use solana_sdk::signature::Signer;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use subscription::MinerSubscription;
 use tokio::time::sleep;
@@ -82,8 +83,8 @@ async fn main() -> Result<()> {
 
     log::info!("✅ Grid selector initialized (random selection)");
 
-    // Initialize martingale state
-    let mut martingale_state = MartingaleState::new(config.martingale.base_bet_lamports());
+    // Initialize martingale state (wrapped in Arc<Mutex> for sharing with async tasks)
+    let martingale_state = Arc::new(Mutex::new(MartingaleState::new(config.martingale.base_bet_lamports())));
 
     // Check initial rewards from miner account (if exists)
     if let Some(miner) = ore_client.get_miner(&signer.pubkey()).await? {
@@ -108,7 +109,7 @@ async fn main() -> Result<()> {
         match run_betting_round(
             &ore_client,
             &executor,
-            &mut martingale_state,
+            &martingale_state,
             &discord,
             &signer,
             &config,
@@ -155,21 +156,6 @@ async fn main() -> Result<()> {
             break;
         }
 
-        // Send stats periodically (every 10 rounds)
-        if martingale_state.current_round % 10 == 0 && martingale_state.current_round > 0 {
-            let total_rounds = martingale_state.win_count + martingale_state.loss_count;
-            if let Err(e) = discord.notify_stats(
-                total_rounds,
-                martingale_state.win_count,
-                martingale_state.loss_count,
-                martingale_state.win_rate(),
-                martingale_state.total_earned_ore,
-                martingale_state.net_profit_sol(),
-            ).await {
-                log::error!("Failed to send stats notification: {}", e);
-            }
-        }
-
         // Calculate dynamic wait time until next round
         match ore_client.get_board().await {
             Ok(current_board) => {
@@ -209,7 +195,7 @@ async fn main() -> Result<()> {
 async fn run_betting_round(
     ore_client: &OreClient,
     executor: &TransactionExecutor,
-    martingale_state: &mut MartingaleState,
+    martingale_state: &Arc<Mutex<MartingaleState>>,
     discord: &DiscordNotifier,
     signer: &dyn Signer,
     config: &config::BotConfig,
@@ -220,11 +206,14 @@ async fn run_betting_round(
     let round_id = board.round_id;
 
     // Check if this is a new round
-    if martingale_state.current_round != round_id {
-        log::info!("🆕 New round detected: #{}", round_id);
-        martingale_state.current_round = round_id;
-    } else {
-        log::debug!("📍 Round #{} (continuing)", round_id);
+    {
+        let mut state = martingale_state.lock().unwrap();
+        if state.current_round != round_id {
+            log::info!("🆕 New round detected: #{}", round_id);
+            state.current_round = round_id;
+        } else {
+            log::debug!("📍 Round #{} (continuing)", round_id);
+        }
     }
 
     // Check if round is active
@@ -255,7 +244,10 @@ async fn run_betting_round(
     let blocks = grid::select_blocks(config.martingale.blocks_per_bet);
     let block_indices: Vec<u8> = blocks.iter().map(|b| b.index).collect();
 
-    let bet_per_block = martingale_state.current_bet_per_block;
+    let (bet_per_block, consecutive_losses) = {
+        let state = martingale_state.lock().unwrap();
+        (state.current_bet_per_block, state.consecutive_losses)
+    };
     let total_bet = bet_per_block * (blocks.len() as u64);
 
     log::info!("🎲 Betting on blocks: {:?}", block_indices);
@@ -270,7 +262,7 @@ async fn run_betting_round(
         &block_indices,
         bet_per_block,
         total_bet,
-        martingale_state.consecutive_losses,
+        consecutive_losses,
     ).await {
         log::error!("Failed to send Discord notification: {}", e);
     }
@@ -290,7 +282,7 @@ async fn run_betting_round(
                 Ok(signature) => {
                     log::info!("✅ Checkpoint + Bet placed successfully!");
                     log::info!("   Signature: {}", signature);
-                    martingale_state.record_bet(total_bet);
+                    martingale_state.lock().unwrap().record_bet(total_bet);
                 }
                 Err(e) => {
                     log::error!("❌ Failed to place checkpoint + bet: {}", e);
@@ -305,7 +297,7 @@ async fn run_betting_round(
                 Ok(signature) => {
                     log::info!("✅ Bet placed successfully!");
                     log::info!("   Signature: {}", signature);
-                    martingale_state.record_bet(total_bet);
+                    martingale_state.lock().unwrap().record_bet(total_bet);
                 }
                 Err(e) => {
                     log::error!("❌ Failed to place bet: {}", e);
@@ -321,7 +313,7 @@ async fn run_betting_round(
             Ok(signature) => {
                 log::info!("✅ Bet placed successfully!");
                 log::info!("   Signature: {}", signature);
-                martingale_state.record_bet(total_bet);
+                martingale_state.lock().unwrap().record_bet(total_bet);
             }
             Err(e) => {
                 log::error!("❌ Failed to place bet: {}", e);
@@ -384,10 +376,13 @@ async fn run_betting_round(
             log::info!("✅ WE WON!");
 
             // Get cycle bet total before resetting martingale state
-            let cycle_bet_total = martingale_state.current_cycle_bet_lamports;
+            let cycle_bet_total = {
+                let state = martingale_state.lock().unwrap();
+                state.current_cycle_bet_lamports
+            };
 
             // Reset martingale state immediately (won, so back to base bet)
-            martingale_state.on_win(&config.martingale, 0, 0);
+            martingale_state.lock().unwrap().reset_after_win(&config.martingale);
 
             // Clone all necessary values for the async task
             let subscription_clone = subscription.clone();
@@ -399,6 +394,9 @@ async fn run_betting_round(
             let final_round_deployed = final_round.deployed[winning_square];
             let bet_per_block_clone = bet_per_block;
             let private_key_clone = config.private_key.clone();
+            let martingale_state_clone = Arc::clone(&martingale_state);
+            let discord_stats_clone = discord.clone();
+            let config_stats_clone = config.clone();
 
             // Process rewards fetch and notifications asynchronously (non-blocking)
             tokio::spawn(async move {
@@ -519,6 +517,9 @@ async fn run_betting_round(
                 log::info!("   SOL earned: {:.6} SOL", sol_earned_actual as f64 / 1e9);
                 log::info!("   Net profit: {:.6} SOL", net_profit as f64 / 1e9);
 
+                // Update martingale state with actual earnings
+                martingale_state_clone.lock().unwrap().update_earnings(ore_earned_actual, sol_earned_actual);
+
                 if let Err(e) = discord_clone.notify_win(
                     round_id,
                     winning_square as u8,
@@ -528,28 +529,92 @@ async fn run_betting_round(
                 ).await {
                     log::error!("Failed to send Discord win notification: {}", e);
                 }
+
+                // Send stats notification if interval reached (after earnings update)
+                let stats_interval = config_stats_clone.discord.stats_notification_interval;
+                let (total_rounds, win_count, loss_count, win_rate, total_earned_ore, net_profit) = {
+                    let state = martingale_state_clone.lock().unwrap();
+                    let total_rounds = state.win_count + state.loss_count;
+                    (
+                        total_rounds,
+                        state.win_count,
+                        state.loss_count,
+                        state.win_rate(),
+                        state.total_earned_ore,
+                        state.net_profit_sol(),
+                    )
+                };
+
+                if total_rounds % stats_interval == 0 && total_rounds > 0 {
+                    if let Err(e) = discord_stats_clone.notify_stats(
+                        total_rounds,
+                        win_count,
+                        loss_count,
+                        win_rate,
+                        total_earned_ore,
+                        net_profit,
+                    ).await {
+                        log::error!("Failed to send stats notification: {}", e);
+                    }
+                }
             });
         } else {
             log::warn!("❌ Lost. Winning square was {}, we bet on {:?}", winning_square, block_indices);
 
-            let (should_continue, should_warn) = martingale_state.on_loss(&config.martingale);
+            let (should_continue, should_warn) = {
+                let mut state = martingale_state.lock().unwrap();
+                state.on_loss(&config.martingale)
+            };
+
+            let (consecutive_losses, current_bet_per_block) = {
+                let state = martingale_state.lock().unwrap();
+                (state.consecutive_losses, state.current_bet_per_block)
+            };
 
             if let Err(e) = discord.notify_loss(
                 round_id,
                 winning_square as u8,
-                martingale_state.consecutive_losses,
-                martingale_state.current_bet_per_block,
+                consecutive_losses,
+                current_bet_per_block,
             ).await {
                 log::error!("Failed to send Discord notification: {}", e);
             }
 
             if should_warn {
                 if let Err(e) = discord.notify_warning(
-                    martingale_state.consecutive_losses,
+                    consecutive_losses,
                     config.martingale.max_consecutive_losses,
-                    martingale_state.current_bet_per_block,
+                    current_bet_per_block,
                 ).await {
                     log::error!("Failed to send Discord notification: {}", e);
+                }
+            }
+
+            // Send stats notification if interval reached (after loss)
+            let stats_interval = config.discord.stats_notification_interval;
+            let (total_rounds, win_count, loss_count, win_rate, total_earned_ore, net_profit) = {
+                let state = martingale_state.lock().unwrap();
+                let total_rounds = state.win_count + state.loss_count;
+                (
+                    total_rounds,
+                    state.win_count,
+                    state.loss_count,
+                    state.win_rate(),
+                    state.total_earned_ore,
+                    state.net_profit_sol(),
+                )
+            };
+
+            if total_rounds % stats_interval == 0 && total_rounds > 0 {
+                if let Err(e) = discord.notify_stats(
+                    total_rounds,
+                    win_count,
+                    loss_count,
+                    win_rate,
+                    total_earned_ore,
+                    net_profit,
+                ).await {
+                    log::error!("Failed to send stats notification: {}", e);
                 }
             }
 

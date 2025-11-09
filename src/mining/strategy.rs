@@ -31,24 +31,19 @@ impl MartingaleState {
         }
     }
 
-    /// Called when winning a round
-    pub fn on_win(
-        &mut self,
-        config: &MartingaleConfig,
-        ore_reward: u64,
-        sol_reward: u64,
-    ) {
-        log::info!("✅ WON Round! ORE: {}, SOL Recovered: {}",
-            ore_reward, sol_reward);
-
+    /// Update earnings after rewards are confirmed (called asynchronously)
+    pub fn update_earnings(&mut self, ore_reward: u64, sol_reward: u64) {
+        log::info!("📊 Updating earnings: ORE: {}, SOL: {}", ore_reward, sol_reward);
         self.total_earned_ore += ore_reward;
         self.total_earned_sol += sol_reward;
+    }
+
+    /// Reset martingale cycle (called immediately on win)
+    pub fn reset_after_win(&mut self, config: &MartingaleConfig) {
         self.consecutive_losses = 0;
-        self.current_cycle_bet_lamports = 0; // Reset cycle bet on win
+        self.current_cycle_bet_lamports = 0;
         self.last_win_time = Some(chrono::Utc::now().timestamp());
         self.win_count += 1;
-
-        // Reset to base bet after win
         self.current_bet_per_block = config.base_bet_lamports();
     }
 
@@ -60,8 +55,8 @@ impl MartingaleState {
         self.consecutive_losses += 1;
         self.loss_count += 1;
 
-        // Check if warning threshold reached
-        let should_warn = self.consecutive_losses == config.warn_consecutive_losses;
+        // Check if warning threshold reached or exceeded
+        let should_warn = self.consecutive_losses >= config.warn_consecutive_losses;
 
         // Check if max consecutive losses reached
         if self.consecutive_losses >= config.max_consecutive_losses {

@@ -2,10 +2,10 @@
   "rpc_url": "https://api.mainnet-beta.solana.com",
   "private_key": "YOUR_BASE58_PRIVATE_KEY_HERE",
   "martingale": {
-    "base_bet_amount": 0.001,
-    "max_consecutive_losses": 10,
+    "base_bet_amount": 0.0001,
+    "max_consecutive_losses": 13,
     "warn_consecutive_losses": 7,
-    "blocks_per_bet": 3
+    "blocks_per_bet": 10
   },
   "monitoring": {
     "min_balance_sol": 0.1,
@@ -14,6 +14,7 @@
   "discord": {
     "webhook_url": "https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN",
     "stats_webhook_url": "https://discord.com/api/webhooks/YOUR_STATS_WEBHOOK_ID/YOUR_STATS_WEBHOOK_TOKEN",
-    "warn_webhook_url": "https://discord.com/api/webhooks/YOUR_WARN_WEBHOOK_ID/YOUR_WARN_WEBHOOK_TOKEN"
+    "warn_webhook_url": "https://discord.com/api/webhooks/YOUR_WARN_WEBHOOK_ID/YOUR_WARN_WEBHOOK_TOKEN",
+    "stats_notification_interval": 10
   }
 }

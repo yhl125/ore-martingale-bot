@@ -271,7 +271,7 @@ impl DiscordNotifier {
                     },
                     {
                         "name": "Total ORE Earned",
-                        "value": format!("{} ORE", total_earned_ore / 1e11 as u64),
+                        "value": format!("{:.6} ORE", total_earned_ore as f64 / 1e11),
                         "inline": true
                     },
                     {

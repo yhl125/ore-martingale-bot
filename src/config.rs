@@ -54,6 +54,12 @@ pub struct DiscordConfig {
     pub webhook_url: String,
     pub stats_webhook_url: String,
     pub warn_webhook_url: String,
+    #[serde(default = "default_stats_interval")]
+    pub stats_notification_interval: u32,
+}
+
+fn default_stats_interval() -> u32 {
+    10
 }
 
 pub fn load_config(path: &str) -> Result<BotConfig> {
