@@ -1,0 +1,30 @@
+# Rust
+/target/
+Cargo.lock
+
+# Config & Secrets
+config.json
+*.json
+!config.example.json
+
+# Keypairs
+*.key
+*.pem
+id.json
+
+# State files
+bot_state.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
