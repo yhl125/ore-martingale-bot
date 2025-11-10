@@ -65,13 +65,20 @@ impl MartingaleState {
             return (false, should_warn); // Don't continue, signal warning
         }
 
-        // Apply martingale: always double the bet (2x multiplier)
-        let new_bet = self.current_bet_per_block * 2;
+        // Apply martingale: multiply bet by configured multiplier
+        let multiplier = config.multiplier;
+        let old_bet = self.current_bet_per_block;
+        
+        // Use f64 for precise calculation, then round to nearest lamport
+        let new_bet_f64 = (old_bet as f64) * multiplier;
+        let new_bet = new_bet_f64.round() as u64;
+                
         self.current_bet_per_block = new_bet;
 
         log::info!(
-            "📈 Martingale: Doubling bet {:.6} → {:.6} SOL",
-            (self.current_bet_per_block / 2) as f64 / 1e9,
+            "📈 Martingale: Multiplying bet by {:.2}x: {:.6} → {:.6} SOL",
+            multiplier,
+            old_bet as f64 / 1e9,
             new_bet as f64 / 1e9
         );
 

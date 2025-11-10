@@ -98,7 +98,7 @@ impl DiscordNotifier {
                         "inline": true
                     },
                     {
-                        "name": "SOL Recovered",
+                        "name": "SOL Reward",
                         "value": format!("{:.6} SOL", sol_reward as f64 / 1e9),
                         "inline": true
                     },

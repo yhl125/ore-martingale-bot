@@ -78,12 +78,12 @@ Round 3: 0.004 SOL → Won   → Next: 0.001 SOL (reset)
    RUST_LOG=info cargo run --release
    ```
 
-   Tip: on small machines (e.g., GCP e2‑micro), skip compiling and run the prebuilt Linux x86_64 binary (v0.1.0):
+   Tip: on small machines (e.g., GCP e2‑micro), skip compiling and run the prebuilt Linux x86_64 binary (v0.1.2):
 
    ```bash
    # Download prebuilt binary
    wget -O ore-martingale-bot \
-     https://github.com/yhl125/ore-martingale-bot/releases/download/v0.1.0/ore-martingale-bot
+     https://github.com/yhl125/ore-martingale-bot/releases/download/v0.1.2/ore-martingale-bot
 
    # Make it executable and run (put config.json next to the binary)
    chmod +x ore-martingale-bot
@@ -124,10 +124,11 @@ Round 3: 0.004 SOL → Won   → Next: 0.001 SOL (reset)
 
 | Parameter | Type | Range | Description |
 |-----------|------|-------|-------------|
-| `base_bet_amount` | float | 0.001-1.0 | Starting bet per block (SOL) |
+| `base_bet_amount` | float | 0.0001-1.0 | Starting bet per block (SOL) |
 | `max_consecutive_losses` | int | 5-15 | Stop after N consecutive losses |
 | `warn_consecutive_losses` | int | 3-12 | Warning threshold before max |
 | `blocks_per_bet` | int | 1-25 | Number of blocks per round |
+| `multiplier` | float | 1.0-5.0 | Bet multiplier on loss (default: 2.0) |
 
 **Block Selection Strategy:**
 

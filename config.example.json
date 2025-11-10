@@ -5,7 +5,8 @@
     "base_bet_amount": 0.0001,
     "max_consecutive_losses": 13,
     "warn_consecutive_losses": 7,
-    "blocks_per_bet": 10
+    "blocks_per_bet": 10,
+    "multiplier": 2.0
   },
   "monitoring": {
     "min_balance_sol": 0.1,

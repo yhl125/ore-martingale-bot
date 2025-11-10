@@ -17,6 +17,8 @@ pub struct MartingaleConfig {
     pub max_consecutive_losses: u8,   // Max losses before reset (bet doubles each loss)
     pub warn_consecutive_losses: u8,  // Send Discord warning at this loss count
     pub blocks_per_bet: u8,           // Number of grid blocks to bet on (1-25)
+    #[serde(default = "default_multiplier")]
+    pub multiplier: f64,              // Bet multiplier on loss (default: 2.0)
 }
 
 impl MartingaleConfig {
@@ -24,6 +26,10 @@ impl MartingaleConfig {
     pub fn base_bet_lamports(&self) -> u64 {
         (self.base_bet_amount * 1_000_000_000.0) as u64
     }
+}
+
+fn default_multiplier() -> f64 {
+    2.0
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -78,9 +84,30 @@ pub fn load_config(path: &str) -> Result<BotConfig> {
         anyhow::bail!("warn_consecutive_losses must be <= max_consecutive_losses");
     }
 
+    // Validate multiplier range
+    if config.martingale.multiplier < 1.0 {
+        anyhow::bail!("multiplier must be >= 1.0 (got: {})", config.martingale.multiplier);
+    }
+    
+    if config.martingale.multiplier > 10.0 {
+        log::warn!("⚠️ Warning: multiplier {} is very high, bet amounts will grow rapidly!", config.martingale.multiplier);
+    }
+
+    // Validate minimum bet (1000 lamports = 0.000001 SOL)
+    const MIN_BET_LAMPORTS: u64 = 1000;
+    let base_bet_lamports = config.martingale.base_bet_lamports();
+    if base_bet_lamports < MIN_BET_LAMPORTS {
+        anyhow::bail!(
+            "base_bet_amount too small: {:.9} SOL (minimum: {:.9} SOL)",
+            config.martingale.base_bet_amount,
+            MIN_BET_LAMPORTS as f64 / 1e9
+        );
+    }
+
     log::info!("Loaded config from: {}", path);
     log::info!("  RPC URL: {}", config.rpc_url);
     log::info!("  Base bet: {} SOL", config.martingale.base_bet_amount);
+    log::info!("  Multiplier: {}x", config.martingale.multiplier);
     log::info!("  Max consecutive losses: {}", config.martingale.max_consecutive_losses);
     log::info!("  Blocks per bet: {}", config.martingale.blocks_per_bet);
 

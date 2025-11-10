@@ -253,6 +253,29 @@ async fn run_betting_round(
     };
     let total_bet = bet_per_block * (blocks.len() as u64);
 
+    // Check if we have enough balance for this bet
+    // Reserve some SOL for transaction fees and rent-exempt minimum
+    let current_balance = ore_client.solana.get_balance(&signer.pubkey()).await?;
+    let required_balance = total_bet;
+    
+    if current_balance < required_balance {
+        log::error!("⚠️ Insufficient balance for bet!");
+        log::error!("   Current: {:.6} SOL", current_balance as f64 / 1e9);
+        log::error!("   Required: {:.6} SOL (bet) = {:.6} SOL",
+            total_bet as f64 / 1e9,
+            required_balance as f64 / 1e9);
+        
+        if let Err(e) = discord.notify_error(&format!(
+            "Insufficient balance: {:.6} SOL < {:.6} SOL required",
+            current_balance as f64 / 1e9,
+            required_balance as f64 / 1e9
+        )).await {
+            log::error!("Failed to send Discord notification: {}", e);
+        }
+        
+        anyhow::bail!("Insufficient balance for bet");
+    }
+
     log::info!("🎲 Betting on blocks: {:?}", block_indices);
     log::info!("💰 Bet: {:.6} SOL per block, total: {:.6} SOL",
         bet_per_block as f64 / 1e9,
