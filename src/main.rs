@@ -235,6 +235,9 @@ async fn run_betting_round(
 
     // Save current rewards before betting
     let (rewards_sol_before, rewards_ore_before) = if let Some(miner) = ore_client.get_miner(&signer.pubkey()).await? {
+        log::debug!("💰 Current rewards before bet: {:.6} SOL, {:.6} ORE",
+            miner.rewards_sol as f64 / 1e9,
+            miner.rewards_ore as f64 / 1e11);
         (miner.rewards_sol, miner.rewards_ore)
     } else {
         (0, 0)
@@ -428,11 +431,15 @@ async fn run_betting_round(
                 let mut sol_earned_actual = rewards_sol_after.saturating_sub(rewards_sol_before);
                 let mut ore_earned_actual = rewards_ore_after.saturating_sub(rewards_ore_before);
 
-                // If rewards haven't updated yet (0 SOL earned), retry up to 10 times
+                // If rewards haven't updated yet (equal or less than before), retry up to 10 times
                 let mut retry_count = 0;
-                while sol_earned_actual == 0 && retry_count < MAX_REWARDS_RETRIES {
+                while rewards_sol_after <= rewards_sol_before && retry_count < MAX_REWARDS_RETRIES {
                     retry_count += 1;
-                    log::warn!("⚠️ Rewards not updated yet, retrying {}/{}...", retry_count, MAX_REWARDS_RETRIES);
+                    log::debug!("⚠️ Rewards not updated yet (before: {:.6}, after: {:.6}), retrying {}/{}...",
+                        rewards_sol_before as f64 / 1e9,
+                        rewards_sol_after as f64 / 1e9,
+                        retry_count,
+                        MAX_REWARDS_RETRIES);
                     tokio::time::sleep(Duration::from_secs(REWARDS_RETRY_INTERVAL_SECS)).await;
 
                     if let Ok(Some(miner)) = ore_client_clone.get_miner(&signer_pubkey).await {
@@ -441,7 +448,7 @@ async fn run_betting_round(
                         sol_earned_actual = rewards_sol_after.saturating_sub(rewards_sol_before);
                         ore_earned_actual = rewards_ore_after.saturating_sub(rewards_ore_before);
 
-                        if sol_earned_actual > 0 {
+                        if rewards_sol_after > rewards_sol_before {
                             log::debug!("✅ Rewards updated after {} retries: {:.6} SOL, {:.6} ORE",
                                 retry_count,
                                 sol_earned_actual as f64 / 1e9,
@@ -451,8 +458,11 @@ async fn run_betting_round(
                     }
                 }
 
-                if sol_earned_actual == 0 {
-                    log::warn!("⚠️ Rewards still 0 after {} retries", retry_count);
+                if rewards_sol_after <= rewards_sol_before {
+                    log::warn!("⚠️ Rewards still not updated after {} retries (before: {:.6}, after: {:.6})",
+                        retry_count,
+                        rewards_sol_before as f64 / 1e9,
+                        rewards_sol_after as f64 / 1e9);
                 }
 
                 log::info!("💰 Actual SOL earned (from protocol): {:.6} SOL", sol_earned_actual as f64 / 1e9);
